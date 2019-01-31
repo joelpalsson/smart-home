@@ -8,17 +8,25 @@ const int led3Pin = 11;
 const int button1Pin = 3;
 const int button2Pin = 2;
 const int temperatureSensorPin = 0;
-const double maxSensorInput = 1024;
-const double maxVoltage = 5;
-const double scaleFactor = 100;
-const double offset = 50;
+
+const byte temperatureKey = 1;
+const byte windowsKey = 2;
+const byte alarmKey = 3;
 
 char command;
 int sensorInput;
+byte prevSensorInput;
 byte temperature;
+byte prevTemperature;
 byte button1State;
+byte prevButton1State;
+byte button1PushCounter;
+bool windowsOpen;
 byte button2State;
-byte sendBuffer[3];
+byte button2PushCounter;
+byte prevButton2State;
+bool alarmOn;
+byte sendBuffer[2];
 byte nbrBytesSent;
 
 void setup() {
@@ -33,25 +41,16 @@ void setup() {
 }
 
 void loop() {
-  sensorInput = analogRead(temperatureSensorPin);
-  temperature = (byte) (sensorInput / maxSensorInput * maxVoltage * scaleFactor - offset);
-  //Serial.println(temperature);
-  button1State = digitalRead(button1Pin);
-  //Serial.println(button1State);
-  button2State = digitalRead(button2Pin);
-  //Serial.println(button2State);  
-  
-  // Send sensor input
-  sendBuffer[0] = temperature;
-  sendBuffer[1] = button1State;
-  sendBuffer[2] = button2State;
-  nbrBytesSent = btSerial.write(sendBuffer, 3);
 
   // Check for incoming data
   if (btSerial.available()) {
     command = btSerial.read();
     Serial.println(command);
     switch (command) {
+      case '0':
+        sendData(temperatureKey, getTemperature(analogRead(temperatureSensorPin)));
+        sendData(windowsKey, (byte) windowsOpen);
+        sendData(alarmKey, (byte) alarmOn);
       case '1':
         digitalWrite(led1Pin, !digitalRead(led1Pin));
         break;
@@ -62,6 +61,61 @@ void loop() {
         digitalWrite(led3Pin, !digitalRead(led3Pin));
     }
   }
-  
+
+  sensorInput = analogRead(temperatureSensorPin);
+  //Serial.println(sensorInput);
+  if (sensorInput != prevSensorInput) {
+    temperature = getTemperature(sensorInput);
+    //Serial.println(temperature);
+    if (temperature != prevTemperature) {
+      // Send temperature
+      nbrBytesSent = sendData(temperatureKey, temperature);
+      //Serial.println(nbrBytesSent);
+    }
+    temperature = prevTemperature;
+  }
+  prevSensorInput = sensorInput;
+
+  button1State = digitalRead(button1Pin);
+  if (button1State != prevButton1State) {
+    button1PushCounter++;
+    if (button1PushCounter % 2 == 0) {
+      button1PushCounter = 0;
+      windowsOpen = !windowsOpen;
+      Serial.println("windows state changed!");
+      // Send windows status
+      nbrBytesSent = sendData(windowsKey, (byte) windowsOpen);
+    }
+  }
+  prevButton1State = button1State;
+
+  button2State = digitalRead(button2Pin);
+  //Serial.println(button2State);
+  if (button2State != prevButton2State) {
+    button2PushCounter++;
+    if (button2PushCounter % 2 == 0) {
+      button2PushCounter = 0;
+      alarmOn = !alarmOn;
+      Serial.println("alarm state changed!");
+      // Send alarm status
+      nbrBytesSent = sendData(alarmKey, (byte) alarmOn);
+    }
+  }
+  prevButton2State = button2State;
+
   delay(1000);
+}
+
+byte getTemperature(int sensorInput) {
+  const double maxSensorInput = 1024;
+  const double maxVoltage = 5;
+  const double scaleFactor = 100;
+  const double offset = 50;
+  return (byte) (sensorInput / maxSensorInput * maxVoltage * scaleFactor - offset);
+}
+
+int sendData(byte key, byte value) {
+  sendBuffer[0] = key;
+  sendBuffer[1] = value;
+  return btSerial.write(sendBuffer, 2);
 }
