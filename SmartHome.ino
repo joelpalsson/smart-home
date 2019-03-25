@@ -7,24 +7,19 @@ const int led2Pin = 12;
 const int led3Pin = 11;
 const int button1Pin = 3;
 const int button2Pin = 2;
-const int temperatureSensorPin = 0;
+const int sensorPin = 0;
 
 const byte temperatureKey = 1;
 const byte windowsKey = 2;
 const byte alarmKey = 3;
 
-char command;
-int sensorInput;
-byte prevSensorInput;
 byte temperature;
 byte prevTemperature;
-byte button1State;
 byte prevButton1State;
 byte button1PushCounter;
 bool windowsOpen;
-byte button2State;
-byte button2PushCounter;
 byte prevButton2State;
+byte button2PushCounter;
 bool alarmOn;
 byte sendBuffer[2];
 byte nbrBytesSent;
@@ -41,68 +36,43 @@ void setup() {
 }
 
 void loop() {
-
   // Check for incoming data
   if (btSerial.available()) {
-    command = btSerial.read();
+    char command = btSerial.read();
     Serial.println(command);
-    switch (command) {
-      case '0':
-        sendData(temperatureKey, getTemperature(analogRead(temperatureSensorPin)));
-        sendData(windowsKey, (byte) windowsOpen);
-        sendData(alarmKey, (byte) alarmOn);
-      case '1':
-        digitalWrite(led1Pin, !digitalRead(led1Pin));
-        break;
-      case '2':
-        digitalWrite(led2Pin, !digitalRead(led2Pin));
-        break;
-      case '3':
-        digitalWrite(led3Pin, !digitalRead(led3Pin));
-    }
+    // Handle the command
+    handleCommand(command);
   }
 
-  sensorInput = analogRead(temperatureSensorPin);
-  //Serial.println(sensorInput);
-  if (sensorInput != prevSensorInput) {
-    temperature = getTemperature(sensorInput);
-    //Serial.println(temperature);
-    if (temperature != prevTemperature) {
-      // Send temperature
-      nbrBytesSent = sendData(temperatureKey, temperature);
-      //Serial.println(nbrBytesSent);
-    }
+  // Measure the temperature
+  temperature = getTemperature(analogRead(sensorPin));
+  // Check if the temperature has changed
+  if (temperature != prevTemperature) {
+    Serial.println("temperature changed!");
+    // Send the temperature to the Android unit 
+    nbrBytesSent = sendData(temperatureKey, temperature);
     temperature = prevTemperature;
   }
-  prevSensorInput = sensorInput;
-
-  button1State = digitalRead(button1Pin);
-  if (button1State != prevButton1State) {
-    button1PushCounter++;
-    if (button1PushCounter % 2 == 0) {
-      button1PushCounter = 0;
-      windowsOpen = !windowsOpen;
-      Serial.println("windows state changed!");
-      // Send windows status
-      nbrBytesSent = sendData(windowsKey, (byte) windowsOpen);
-    }
+  
+  // Check if the button simulating the window status has been pressed
+  if (buttonPressed(button1Pin, &prevButton1State, &button1PushCounter)) {
+    // Update the window status
+    windowsOpen = !windowsOpen;
+    Serial.println("windows state changed!");
+    // Send the window status to the Android unit
+    nbrBytesSent = sendData(windowsKey, (byte) windowsOpen);
   }
-  prevButton1State = button1State;
 
-  button2State = digitalRead(button2Pin);
-  //Serial.println(button2State);
-  if (button2State != prevButton2State) {
-    button2PushCounter++;
-    if (button2PushCounter % 2 == 0) {
-      button2PushCounter = 0;
-      alarmOn = !alarmOn;
-      Serial.println("alarm state changed!");
-      // Send alarm status
-      nbrBytesSent = sendData(alarmKey, (byte) alarmOn);
-    }
+  // Check if the button simulating the alarm state has been pressed
+  if (buttonPressed(button2Pin, &prevButton2State, &button2PushCounter)) {
+    // Update the alarm status
+    alarmOn = !alarmOn;
+    Serial.println("alarm state changed!");
+    // Send the alarm status to the Android unit
+    nbrBytesSent = sendData(alarmKey, (byte) alarmOn); 
   }
-  prevButton2State = button2State;
 
+  // Wait a second
   delay(1000);
 }
 
@@ -114,8 +84,39 @@ byte getTemperature(int sensorInput) {
   return (byte) (sensorInput / maxSensorInput * maxVoltage * scaleFactor - offset);
 }
 
+void handleCommand(char command) {
+  switch (command) {
+    case '0':
+      sendData(temperatureKey, getTemperature(analogRead(sensorPin)));
+      sendData(windowsKey, (byte) windowsOpen);
+      sendData(alarmKey, (byte) alarmOn);
+    case '1':
+      digitalWrite(led1Pin, !digitalRead(led1Pin));
+      break;
+    case '2':
+      digitalWrite(led2Pin, !digitalRead(led2Pin));
+      break;
+    case '3':
+      digitalWrite(led3Pin, !digitalRead(led3Pin));
+  }
+}
+
 int sendData(byte key, byte value) {
   sendBuffer[0] = key;
   sendBuffer[1] = value;
   return btSerial.write(sendBuffer, 2);
+}
+
+bool buttonPressed(int buttonPin, byte *prevButtonState, byte *buttonPushCounter) {
+  bool buttonPressed = false;
+  byte buttonState = digitalRead(buttonPin);
+  if (buttonState != *prevButtonState) {
+    *buttonPushCounter = *buttonPushCounter + 1;
+    if (*buttonPushCounter == 2) {
+      *buttonPushCounter = 0;
+      buttonPressed = true;
+    }
+    *prevButtonState = buttonState;
+  }
+  return buttonPressed;
 }
