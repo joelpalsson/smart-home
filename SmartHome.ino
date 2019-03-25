@@ -13,7 +13,6 @@ const byte temperatureKey = 1;
 const byte windowsKey = 2;
 const byte alarmKey = 3;
 
-byte temperature;
 byte prevTemperature;
 byte prevButton1State;
 byte button1PushCounter;
@@ -45,13 +44,13 @@ void loop() {
   }
 
   // Measure the temperature
-  temperature = getTemperature(analogRead(sensorPin));
+  byte temperature = getTemperature(analogRead(sensorPin));
   // Check if the temperature has changed
   if (temperature != prevTemperature) {
     Serial.println("temperature changed!");
     // Send the temperature to the Android unit 
     nbrBytesSent = sendData(temperatureKey, temperature);
-    temperature = prevTemperature;
+    prevTemperature = temperature;
   }
   
   // Check if the button simulating the window status has been pressed
@@ -63,7 +62,7 @@ void loop() {
     nbrBytesSent = sendData(windowsKey, (byte) windowsOpen);
   }
 
-  // Check if the button simulating the alarm state has been pressed
+  // Check if the button simulating the alarm status has been pressed
   if (buttonPressed(button2Pin, &prevButton2State, &button2PushCounter)) {
     // Update the alarm status
     alarmOn = !alarmOn;
